@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.android.swipedismiss;
+package com.example.android.swipedismiss.sample;
 
 import android.app.ListActivity;
 import android.os.Bundle;
@@ -24,6 +24,9 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.Toast;
+
+import com.example.android.swipedismiss.SwipeDismissListViewTouchListener;
+import com.example.android.swipedismiss.SwipeDismissTouchListener;
 
 import java.util.ArrayList;
 import java.util.Arrays;

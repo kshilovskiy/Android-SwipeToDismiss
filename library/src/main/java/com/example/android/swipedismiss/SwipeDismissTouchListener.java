@@ -78,6 +78,8 @@ public class SwipeDismissTouchListener implements View.OnTouchListener {
     private VelocityTracker mVelocityTracker;
     private float mTranslationX;
 
+    private DismissPerformer mDismissPerformer;
+
     /**
      * The callback interface used by {@link SwipeDismissTouchListener} to inform its client
      * about a successful dismissal of the view for which it was created.
@@ -98,14 +100,36 @@ public class SwipeDismissTouchListener implements View.OnTouchListener {
     }
 
     /**
+     * Provides an animator to be started when the view is swiped away from the screen.
+     * It is important to trigger the dismiss callback in order to notify that the view is
+     * dismissed.
+     */
+    public static interface DismissPerformer {
+        /**
+         * Called when the view swipe animation is finished and dismiss animation is required.
+         *
+         * @param view      The originating {@link View} to be dismissed.
+         * @param callbacks The callback to trigger when the user has indicated that she would like
+         *                  to dismiss this view.
+         * @return the animator to be started when the view is swiped away.
+         */
+        public Animator get(View view, DismissCallbacks callbacks);
+    }
+
+    /**
      * Constructs a new swipe-to-dismiss touch listener for the given view.
      *
-     * @param view     The view to make dismissable.
-     * @param token    An optional token/cookie object to be passed through to the callback.
+     * @param view      The view to make dismissable.
+     * @param token     An optional token/cookie object to be passed through to the callback.
      * @param callbacks The callback to trigger when the user has indicated that she would like to
-     *                 dismiss this view.
+     *                  dismiss this view.
      */
     public SwipeDismissTouchListener(View view, Object token, DismissCallbacks callbacks) {
+        this(view, token, callbacks, buildDefaultDismissPerformer(view, token));
+    }
+
+    public SwipeDismissTouchListener(View view, Object token, DismissCallbacks callbacks,
+                                     DismissPerformer dismissPerformer) {
         ViewConfiguration vc = ViewConfiguration.get(view.getContext());
         mSlop = vc.getScaledTouchSlop();
         mMinFlingVelocity = vc.getScaledMinimumFlingVelocity() * 16;
@@ -115,6 +139,7 @@ public class SwipeDismissTouchListener implements View.OnTouchListener {
         mView = view;
         mToken = token;
         mCallbacks = callbacks;
+        mDismissPerformer = dismissPerformer;
     }
 
     @Override
@@ -246,35 +271,59 @@ public class SwipeDismissTouchListener implements View.OnTouchListener {
     }
 
     private void performDismiss() {
-        // Animate the dismissed view to zero-height and then fire the dismiss callback.
-        // This triggers layout on each animation frame; in the future we may want to do something
-        // smarter and more performant.
-
-        final ViewGroup.LayoutParams lp = mView.getLayoutParams();
-        final int originalHeight = mView.getHeight();
-
-        ValueAnimator animator = ValueAnimator.ofInt(originalHeight, 1).setDuration(mAnimationTime);
-
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                mCallbacks.onDismiss(mView, mToken);
-                // Reset view presentation
-                mView.setAlpha(1f);
-                mView.setTranslationX(0);
-                lp.height = originalHeight;
-                mView.setLayoutParams(lp);
-            }
-        });
-
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                lp.height = (Integer) valueAnimator.getAnimatedValue();
-                mView.setLayoutParams(lp);
-            }
-        });
-
+        //Run dismiss animation
+        Animator animator = mDismissPerformer.get(mView, mCallbacks);
         animator.start();
+    }
+
+    private static DismissPerformer buildDefaultDismissPerformer(View view, Object token){
+        long animationTime = view.getContext().getResources().getInteger(
+                android.R.integer.config_shortAnimTime);
+        return new DefaultDismissPerformer(animationTime, token);
+    }
+
+    /**
+     * Performs height squeeze animation when the view is swiped away,
+     * then restores initial view properties.
+     */
+    public static class DefaultDismissPerformer implements DismissPerformer {
+
+        private final long mAnimationTime;
+        private final Object mToken;
+
+        public DefaultDismissPerformer(long mAnimationTime, Object mToken) {
+            this.mAnimationTime = mAnimationTime;
+            this.mToken = mToken;
+        }
+
+        @Override
+        public Animator get(final View view, final DismissCallbacks callbacks) {
+            final ViewGroup.LayoutParams lp = view.getLayoutParams();
+            final int originalHeight = view.getHeight();
+
+            ValueAnimator animator = ValueAnimator.ofInt(originalHeight, 1).setDuration(mAnimationTime);
+
+            animator.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    callbacks.onDismiss(view, mToken);
+                    // Reset view presentation
+                    view.setAlpha(1f);
+                    view.setTranslationX(0);
+                    lp.height = originalHeight;
+                    view.setLayoutParams(lp);
+                }
+            });
+
+            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                    lp.height = (Integer) valueAnimator.getAnimatedValue();
+                    view.setLayoutParams(lp);
+                }
+            });
+
+            return animator;
+        }
     }
 }
